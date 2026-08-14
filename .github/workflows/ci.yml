@@ -144,6 +144,7 @@ jobs:
       - name: Verify docs and routing sync
         if: always()
         id: docs_sync
+        shell: bash
         run: |
           python scripts/verify-docs-sync.py
           python scripts/test-verify-docs-sync.py
