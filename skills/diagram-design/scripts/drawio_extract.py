@@ -679,12 +679,16 @@ def _escape_markdown(text: str) -> str:
     return re.sub(r"([\\`*{}\[\]()#+\-.!_|>])", r"\\\1", encoded)
 
 
+def _fold_lines(text: str, replacement: str) -> str:
+    return replacement.join(text.splitlines())
+
+
 def _escape_inline(text: str) -> str:
-    return _escape_markdown(text.replace("\n", " · "))
+    return _escape_markdown(_fold_lines(text, " · "))
 
 
 def _escape_table(text: str) -> str:
-    return _escape_markdown(text.replace("\n", " ⏎ "))
+    return _escape_markdown(_fold_lines(text, " ⏎ "))
 
 
 def page_bounds(page: Page) -> tuple[float, float, float, float]:
