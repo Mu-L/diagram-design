@@ -87,7 +87,7 @@ All 38 visual types ship in three static variants: minimal light, minimal dark, 
 </tr>
 </table>
 
-**New in 2.5.10 — ten layout grammars nothing else covered.** Screenshots land with the next release; open the examples directly in the meantime.
+**New in 2.5.10 — ten layout grammars nothing else covered.** Open the examples directly or compare every light, dark, and full-editorial render in the [30-variant contact sheet](.github/pr-previews/editorial-diagrams-2.5.10.jpg).
 
 | Type | Shows | Example |
 |---|---|---|
