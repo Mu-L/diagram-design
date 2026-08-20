@@ -457,6 +457,43 @@ Docs and routing surfaces are themselves gated: `python3 scripts/verify-docs-syn
 
 All pull requests and pushes are automatically validated across Linux, Windows, and macOS runners via GitHub Actions CI (`.github/workflows/ci.yml`).
 
+`lint-skin.py` reads the source. `lint-render.py` renders it — headless Chromium
+reports what actually got painted, which catches content cut off by the SVG
+viewport, collapsed SVGs, horizontal page overflow, missing local assets and JS
+errors. Both run in CI on every pull request.
+
+```bash
+pip install playwright && playwright install chromium   # same dep as PNG export
+python3 scripts/lint-render.py --self-test              # checks the checks
+python3 scripts/lint-render.py --all                   # examples and templates
+python3 scripts/lint-render.py <your-new-example.html>
+python3 scripts/lint-render.py --fonts --all           # measure with the real webfonts
+```
+
+Clipping is measured by paint, not geometry: `getBoundingClientRect()` on an SVG
+child ignores stroke width, markers and filter bleed, and knows nothing about
+`clip-path` or `overflow: visible`, so it both misses real clipping and invents
+clipping that isn't there. Instead each SVG is screenshot as authored and again
+with its `overflow` released, and the two are diffed — ink that appears outside
+was being cut off. Releases are staged — the SVG alone, then each clipping
+ancestor — so a wrapper release can't mask spill at the SVG's own edge, and an SVG
+authored `overflow: visible` inside a clipping wrapper is still checked.
+`--self-test` asserts all of that on 23 cases, over half of them cases that must
+*not* be flagged, and it also asserts the DOM is byte-identical after measuring.
+
+No golden images, so there is nothing to re-record and no PNGs in the repo.
+Network is cut at the browser's resolver, which covers WebSockets and anything
+else that bypasses request routing, with request routing as a second layer;
+`--fonts` excludes exactly the two Google Fonts hostnames and allows them only
+over HTTPS. Since the oracle is pixels, CI pins Playwright and its Chromium build
+rather than installing whatever is newest.
+
+**Font metrics differ between the default run and `--fonts`.** With network
+blocked — the default, and what CI runs — text is laid out in the fallback faces,
+not Instrument Serif and Geist. That is deterministic and machine-independent,
+which is what a linter needs, but it is not what your reader sees. Run
+`--fonts --all` locally when you care whether real text fits its box.
+
 ### What loads when
 
 At startup, the agent sees only the skill name and description. When a request matches, it loads `SKILL.md`; semantic, type, and animation references are pulled in only when relevant.
