@@ -20,6 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "scripts/verify-treemap.py"
 GOOD = ROOT / "skills/diagram-design/assets/example-treemap.html"
+SHIPPED = sorted(GOOD.parent.glob("example-treemap*.html"))
 
 
 def run(path: Path) -> tuple[int, str]:
@@ -46,12 +47,16 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as raw:
         directory = Path(raw)
 
-        # 1. The shipped example must pass untouched.
-        code, output = run(write(directory, "clean.html", source))
-        if code != 0:
-            failures.append(f"clean example was rejected: {output.strip()}")
-        else:
-            print("OK: the shipped treemap passes")
+        # 1. Every shipped Latin example must pass untouched, proving the
+        #    Unicode estimator did not move the calibrated Latin baseline.
+        shipped_clean = True
+        for path in SHIPPED:
+            code, output = run(path)
+            if code != 0:
+                shipped_clean = False
+                failures.append(f"clean example {path.name} was rejected: {output.strip()}")
+        if shipped_clean:
+            print(f"OK: all {len(SHIPPED)} shipped Latin treemaps pass")
 
         # 2. Shrink a labelled cell below the share it prints. This is the
         #    defect that shipped in review — a cell drawn smaller than it claims
@@ -103,6 +108,31 @@ def main() -> int:
                 failures.append(f"overflow reported without a fit finding: {output.strip()}")
             else:
                 print("OK: a label wider than its cell is rejected")
+
+        # 4a. Reproduce #115: most glyphs in this Korean translation are
+        #     full-width. The old 0.60em character-count estimate called it
+        #     122.4px wide and accepted it in 132px of available space, while
+        #     Chromium measured 146.2px. A conservative 1em wide-glyph advance
+        #     must fail closed without changing the Latin estimate.
+        korean = source.replace(
+            '<text x="804" y="324" fill="#2d3142" font-size="12" font-weight="600" '
+            'font-family="\'Geist\', sans-serif">South America</text>',
+            '<text x="804" y="324" fill="#2d3142" font-size="12" font-weight="600" '
+            'font-family="\'Geist\', \'Apple SD Gothic Neo\', \'Noto Sans KR\', '
+            '\'Malgun Gothic\', sans-serif">남아메리카 인구 구성 비율 요약</text>',
+        )
+        if korean == source:
+            failures.append("could not build the Korean-overflow fixture (anchor moved)")
+        else:
+            code, output = run(write(directory, "korean-overflow.html", korean))
+            if code == 0:
+                failures.append("full-width Korean label overflowing its cell was accepted")
+            elif "52.8 right" not in output:
+                failures.append(
+                    f"Korean overflow did not use the conservative wide estimate: {output.strip()}"
+                )
+            else:
+                print("OK: a Korean label in the old-estimator boundary gap is rejected")
 
         # 4b. Overflow off the LEFT edge, via an end-anchored label. Checking
         #     only the right and bottom edges would pass this silently, and the
@@ -156,6 +186,21 @@ def main() -> int:
                 failures.append(f"marker overflow not named in the finding: {output.strip()}")
             else:
                 print("OK: an information mark overflowing its cell is rejected")
+
+        # 4e. Combining marks do not advance independently. Eighteen decomposed
+        #     accented glyphs fit by the unchanged Latin baseline (129.6px in
+        #     132px), but counting every acute accent as a character would
+        #     incorrectly double the estimate and reject the label.
+        decomposed = ("e\N{COMBINING ACUTE ACCENT}" * 18)
+        combining = source.replace(">South America</text>", f">{decomposed}</text>")
+        if combining == source:
+            failures.append("could not build the combining-mark fixture (anchor moved)")
+        else:
+            code, output = run(write(directory, "combining-marks.html", combining))
+            if code != 0:
+                failures.append(f"non-advancing combining marks were overcounted: {output.strip()}")
+            else:
+                print("OK: combining marks do not create phantom label overflow")
 
         # 5. The shipped example leaves its smallest cell deliberately
         #    unlabelled. That must not switch the area check off for the cells
