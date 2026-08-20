@@ -8,7 +8,7 @@ Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first. All contributions ar
 
 ## What this project is
 
-Diagram Design is an agent skill (Claude Code, Codex, Pi) that produces editorial-quality diagrams as self-contained HTML files. The repo is documentation-first: `skills/diagram-design/SKILL.md` is the index, each of the 38 visual types has its own reference file, and the extractor scripts in `skills/diagram-design/scripts/` turn draw.io and Mermaid sources into a structured IR.
+Diagram Design is an agent skill (Claude Code, Codex, Pi) that produces editorial-quality diagrams as self-contained HTML files. The repo is documentation-first: `skills/diagram-design/SKILL.md` is the index, each of the 39 visual types has its own reference file, and the extractor scripts in `skills/diagram-design/scripts/` turn draw.io and Mermaid sources into a structured IR.
 
 See [README.md](README.md) for the full picture, including the design system and the import/export flows.
 
@@ -46,6 +46,7 @@ The helper refuses to run if the Claude and Codex versions already differ. If an
 | Semantic-pattern routing | `python3 scripts/verify-semantic-motion.py --markdown-only` |
 | Animated-example structure and accessibility | `python3 scripts/verify-semantic-motion.py --example-only` |
 | Skin conformance of every example and template (colors, fonts, a11y, assets, scripts) | `python3 scripts/lint-skin.py --all --baseline` |
+| Quantitative polar encoding and variant parity | `python3 scripts/test-verify-polar.py && python3 scripts/verify-polar.py` |
 | A single file, e.g. a new example | `python3 scripts/lint-skin.py skills/diagram-design/assets/example-my-type.html` |
 | Sequence-doc consistency (ATL fragments, budgets) | `python3 scripts/verify-sequence-oauth.py` |
 | draw.io import path (real extractor vs fixtures + docs sync) | `python3 scripts/verify-drawio-import.py && python3 scripts/test-verify-drawio-import.py` |
@@ -80,6 +81,8 @@ python3 scripts/test-plugin-package.py \
   && python3 scripts/verify-semantic-motion.py --example-only \
   && python3 scripts/verify-motion.py --shipped \
   && python3 scripts/lint-skin.py --all --baseline \
+  && python3 scripts/test-verify-polar.py \
+  && python3 scripts/verify-polar.py \
   && python3 scripts/verify-sequence-oauth.py \
   && python3 scripts/verify-drawio-import.py \
   && python3 scripts/test-verify-drawio-import.py \
@@ -106,7 +109,7 @@ python3 scripts/test-plugin-package.py \
 - **`verify-plugin-package.py`:** run the bump helper if the versions did not increase. If packaging validation fails, keep both marketplaces pointed at the repository root and keep the shared skill at `skills/diagram-design/SKILL.md`.
 - **`lint-skin.py`:** the failure message names the file, line, and category (`color`, `font-family`, `a11y`, `external-asset`, `pure-black`, `script`). Colors must come from the palette in `skills/diagram-design/references/style-guide.md`; fonts from the allowed list; diagrams must satisfy the accessible SVG contract (see below). The linter also requires the SHA-pinned controller from `template-motion.html` verbatim and rejects remote resources, CSS `@import`, non-fragment CSS `url()`, event handlers, `srcdoc`, executable URLs, and extra scripts.
 - **`verify-*.py`:** the extractor's real behavior no longer matches its fixture or the documentation, or the reference/command/prompt wiring drifted. Fix the source of truth — do not widen a test to avoid a failure.
-- **`verify-screenshot-freshness.py`:** a canonical minimal-light example or its committed PNG changed without a synchronized catalog refresh. Before the first regeneration, install the renderer with `python3 -m pip install playwright && python3 -m playwright install chromium`. Then run `python3 scripts/render-canonical-screenshots.py`, inspect all 38 renders, and commit the updated PNGs plus `docs/screenshots/manifest.json`.
+- **`verify-screenshot-freshness.py`:** a canonical minimal-light example or its committed PNG changed without a synchronized catalog refresh. Before the first regeneration, install the renderer with `python3 -m pip install playwright && python3 -m playwright install chromium`. Then run `python3 scripts/render-canonical-screenshots.py`, inspect all 39 renders, and commit the updated PNGs plus `docs/screenshots/manifest.json`.
 - **`verify-slopegraph.py`:** the two axes disagree about scale or origin, or an endpoint is drawn somewhere other than where its own declared value belongs. Fix the coordinate, never the label — and never move a point to stop two endpoint labels colliding, because crowded labels mean the values really are close.
 - **`verify-geometry.py`:** a label mask overlaps a node declared later in the document, so the node fill clips the label at render time. Move the label to a free segment of its connector — keep the 6–10px gap from the stroke required by SKILL.md §6, and do not shrink the mask to sneak under the check.
 - **Icon assets:** you changed `scripts/vendor/icons/` or `scripts/build-icons.py` and the generated files went stale. Rerun `python3 scripts/build-icons.py` and commit the regenerated files.
