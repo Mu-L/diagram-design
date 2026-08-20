@@ -131,6 +131,27 @@ diagram-design/
 
         readme.write_text(
             valid_readme.replace(
+                "droid plugin marketplace add https://github.com/example/diagram-design\n"
+                "droid plugin install diagram-design@diagram-design --scope user",
+                "droid plugin install diagram-design@diagram-design --scope user\n"
+                "droid plugin marketplace add https://github.com/example/diagram-design",
+            ),
+            encoding="utf-8",
+        )
+        errors = []
+        verify.check_factory_install_surface(errors, root)
+        expected = (
+            "README Factory install block must match native metadata: "
+            "`droid plugin marketplace add https://github.com/example/diagram-design` "
+            "then `droid plugin install diagram-design@diagram-design`"
+        )
+        if errors != [expected]:
+            raise AssertionError(
+                f"reversed Factory install commands were not reported: {errors}"
+            )
+
+        readme.write_text(
+            valid_readme.replace(
                 "diagram-design@diagram-design", "diagram-design@wrong-marketplace"
             ),
             encoding="utf-8",

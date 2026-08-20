@@ -175,9 +175,12 @@ def check_factory_install_surface(errors: list[str], root: Path) -> None:
         for block in code_blocks
     ]
     install_is_documented = any(
-        marketplace_command in lines
-        and any(line == install_command or line.startswith(f"{install_command} ") for line in lines)
+        any(
+            line == install_command or line.startswith(f"{install_command} ")
+            for line in lines[lines.index(marketplace_command) + 1 :]
+        )
         for lines in command_blocks
+        if marketplace_command in lines
     )
     if not install_is_documented:
         errors.append(
