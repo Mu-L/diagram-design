@@ -262,6 +262,66 @@ diagram-design/
         if errors != [expected]:
             raise AssertionError(f"missing Factory native path was not reported: {errors}")
 
+        counted = root / "commands"
+        counted.mkdir(parents=True, exist_ok=True)
+        drawio = counted / "import-drawio.md"
+        mermaid = counted / "import-mermaid.md"
+        routed = "`--type` forces one of the visual types in SKILL.md \u00a73.\n"
+        for path in (drawio, mermaid):
+            path.write_text(routed, encoding="utf-8")
+
+        errors = []
+        verify.check_type_counts(errors, root)
+        if errors:
+            raise AssertionError(f"a command pointing at SKILL.md failed: {errors}")
+
+        # The stale wording the gate was written for, the same wording wrapped
+        # across the line the real commands wrap on, and the rewrites a later
+        # edit would reach for. Each is the only defect in the tree, so the gate
+        # has to report exactly one error.
+        for stale in (
+            "`--type` forces one of the 27.\n",
+            "`--type` forces one of the\n27 visual types.\n",
+            "`--type` forces one of 28.\n",
+            "The skill draws 28 visual types.\n",
+            "The skill draws 28 supported visual diagram types.\n",
+            "The skill supports 28 types of visual diagrams.\n",
+        ):
+            mermaid.write_text(stale, encoding="utf-8")
+            errors = []
+            verify.check_type_counts(errors, root)
+            if len(errors) != 1 or "hardcodes the visual-type count" not in errors[0]:
+                raise AssertionError(
+                    f"a hardcoded count was not reported for {stale!r}: {errors}"
+                )
+
+        # Counts that are not the visual-type count must pass. A gate that
+        # rejects "accepts 2 file types" is one contributors route around, and
+        # both commands already carry unrelated numbers in their flag docs.
+        for benign in (
+            "`--type` accepts 2 file types.\n",
+            "Produces 3 output types.\n",
+            "`--detail=faithful` allows 24 nodes.\n",
+            "Reads 2 types of visual file.\n",
+        ):
+            mermaid.write_text(routed + benign, encoding="utf-8")
+            errors = []
+            verify.check_type_counts(errors, root)
+            if errors:
+                raise AssertionError(
+                    f"a count unrelated to the taxonomy was rejected for {benign!r}: {errors}"
+                )
+
+        # Restore the routed wording first: leaving a stale count behind lets
+        # this case pass on the wrong error and never names the missing surface.
+        mermaid.write_text(routed, encoding="utf-8")
+        drawio.unlink()
+        errors = []
+        verify.check_type_counts(errors, root)
+        expected = "type-count surface is missing: commands/import-drawio.md"
+        if errors != [expected]:
+            raise AssertionError(f"a missing command surface was not reported: {errors}")
+
     print(
         "PASS: docs sync checks references, strict-bundler packaging, profile surfaces, "
         "and Factory install contract"
