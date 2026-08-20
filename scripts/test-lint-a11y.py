@@ -169,6 +169,18 @@ def main() -> int:
             directory,
         )
         require_failure(
+            "viewbox-zero-height",
+            VALID_SVG.replace('viewBox="0 0 800 600"', 'viewBox="0 0 800 0"'),
+            'viewBox "0 0 800 0" is not valid (expected "min-x min-y width height" with positive size)',
+            directory,
+        )
+        require_failure(
+            "viewbox-malformed-token",
+            VALID_SVG.replace('viewBox="0 0 800 600"', 'viewBox="0 0 800px 600"'),
+            'viewBox "0 0 800px 600" is not valid (expected "min-x min-y width height" with positive size)',
+            directory,
+        )
+        require_failure(
             "title-too-long",
             VALID_SVG.replace("Fixture diagram", "A" * 61),
             "<title> must be 60 characters or fewer (got 61)",
