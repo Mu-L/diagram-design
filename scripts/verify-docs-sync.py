@@ -58,6 +58,18 @@ SCANNER_VISIBLE_SUPPORT_REFERENCE = re.compile(
     r"((?:references|templates|scripts|assets|examples)/[^\s)`\"'<>]+)",
     re.MULTILINE,
 )
+REQUIRED_PACKAGED_RUNTIME_FILES = frozenset(
+    {
+        "scripts/self_check.py",
+        "scripts/drawio_extract.py",
+        "scripts/mermaid_extract.py",
+        "assets/template.html",
+        "assets/template-dark.html",
+        "assets/template-full.html",
+        "assets/template-motion.html",
+        "assets/template-terminal.html",
+    }
+)
 
 
 def normalized(text: str) -> str:
@@ -173,7 +185,8 @@ def check_packaged_support_references(
     errors: list[str], markdown: str, skill_directory: Path
 ) -> None:
     """Require every scanner-visible path to be a safe, packaged file."""
-    for target in scanner_visible_support_references(markdown):
+    scanner_references = scanner_visible_support_references(markdown)
+    for target in scanner_references:
         normalized_target = target.replace("\\", "/")
         path = PurePosixPath(normalized_target)
         parts = [part for part in path.parts if part not in {"", "."}]
@@ -190,6 +203,11 @@ def check_packaged_support_references(
                 f"SKILL.md exposes missing packaged support file {target!r}; "
                 "strict skill bundlers will abort installation"
             )
+    for target in sorted(REQUIRED_PACKAGED_RUNTIME_FILES - set(scanner_references)):
+        errors.append(
+            f"SKILL.md does not expose required packaged runtime file {target!r}; "
+            "strict skill bundlers will omit it"
+        )
 
 
 def check_profile_surfaces(errors: list[str], root: Path) -> None:
