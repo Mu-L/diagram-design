@@ -22,9 +22,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "scripts/verify-treemap.py"
 GOOD = ROOT / "skills/diagram-design/assets/example-treemap.html"
 SHIPPED = sorted(GOOD.parent.glob("example-treemap*.html"))
-ESTIMATED_ADVANCE = runpy.run_path(str(CHECKER), run_name="verify_treemap_test")[
-    "estimated_advance"
-]
+VERIFY_NAMESPACE = runpy.run_path(str(CHECKER), run_name="verify_treemap_test")
+ESTIMATED_ADVANCE = VERIFY_NAMESPACE["estimated_advance"]
+PARSE_CELLS = VERIFY_NAMESPACE["parse_cells"]
 KOREAN_LABEL = "남아메리카 인구 구성 비율 요약"
 JAPANESE_LABEL = "南アメリカ人口構成比率の概要"
 
@@ -395,6 +395,53 @@ def main() -> int:
             failures.append(f"too-few-cells fixture lacked the right finding: {output.strip()}")
         else:
             print("OK: too few parseable cells fails closed")
+
+        # 13. An explicitly metadata-bearing cell remains a cell even below
+        #     the generic 400px decorative-rect threshold. Oceania at 2x124
+        #     used to disappear with its mask, leaving a plausible 99.43%
+        #     total that slipped through the rounding tolerance.
+        below_threshold = source.replace(
+            '<rect x="940" y="296" width="16" height="124"',
+            '<rect x="940" y="296" width="2" height="124"',
+        ).replace('cx="948" cy="320"', 'cx="941" cy="320"').replace(
+            '<text x="948" y="323"', '<text x="941" y="323"'
+        )
+        if below_threshold == source:
+            failures.append("could not build the below-threshold-cell fixture")
+        else:
+            sliver = next(
+                (cell for cell in PARSE_CELLS(below_threshold) if cell.w == 2 and cell.h == 124),
+                None,
+            )
+            if sliver is None or sliver.rect_count != 2:
+                failures.append(
+                    "the below-threshold metadata cell lost its same-geometry mask/body association"
+                )
+            code, output = run(write(directory, "below-threshold-cell.html", below_threshold))
+            if code == 0:
+                failures.append("a metadata-bearing cell below CELL_MIN_AREA was discarded")
+            elif "cell 2x124" not in output:
+                failures.append(
+                    f"below-threshold cell was not preserved as a logical cell: {output.strip()}"
+                )
+            else:
+                print("OK: metadata-bearing cells bypass the decorative-area threshold")
+
+        # 14. Every percentage claim hosted by a cell must agree. Reading only
+        #     the first match accepted a later contradiction when 59% appeared
+        #     before 42% in the same cell.
+        conflicting_labels = source.replace(
+            "4.78B · 59% of world",
+            "4.78B · 59% of world · alternate claim 42%",
+            1,
+        )
+        code, output = run(write(directory, "conflicting-label-claims.html", conflicting_labels))
+        if code == 0:
+            failures.append("distinct percentage claims in one cell were accepted")
+        elif "conflicting percentage claims" not in output:
+            failures.append(f"conflicting labels lacked the right finding: {output.strip()}")
+        else:
+            print("OK: every hosted percentage claim must agree")
 
     for failure in failures:
         print(f"FAIL: {failure}")

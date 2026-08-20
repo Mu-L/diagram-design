@@ -181,7 +181,12 @@ def parse_cells(source: str) -> list[Box]:
                     )
                 else:
                     box.share = parsed_share
-        if box.area < CELL_MIN_AREA or box.w > CELL_MAX_W or box.h > CELL_MAX_H:
+        # Metadata is an explicit declaration that this rect is a treemap
+        # cell. Keep even sub-threshold cells (the narrowest slivers are the
+        # easiest to distort), and keep their same-geometry masks long enough
+        # to associate the mask/body pair below. Unmarked decorative rects are
+        # filtered only after all pairs have been assembled.
+        if box.w > CELL_MAX_W or box.h > CELL_MAX_H:
             continue
         twin = next(
             (
@@ -208,7 +213,11 @@ def parse_cells(source: str) -> list[Box]:
                 twin.share = box.share
             continue
         seen.append(box)
-    return seen
+    return [
+        box
+        for box in seen
+        if box.area >= CELL_MIN_AREA or box.share is not None or box.share_errors
+    ]
 
 
 def label_box(attrs: dict[str, str], body: str) -> Box | None:
@@ -410,12 +419,34 @@ def check(path: Path) -> list[str]:
                 f"draws {area_share:.2f}% of the area but declares {declared:.2f}% — "
                 f"{relative:+.1f}% relative. Area is the only encoding; resize the cell"
             )
+
+        # A label and the metadata are two statements of one fact. Read every
+        # percentage in the hosted labels: search() alone silently accepted a
+        # later contradictory claim when the first happened to be correct.
+        label_text = " ".join(labels[index])
+        percentages = [
+            value
+            for match in PCT_RE.finditer(label_text)
+            if (value := _number(match)) is not None
+        ]
+        distinct_percentages: list[float] = []
+        for percentage in percentages:
+            if not any(
+                math.isclose(percentage, known, rel_tol=0.0, abs_tol=1e-9)
+                for known in distinct_percentages
+            ):
+                distinct_percentages.append(percentage)
+        if len(distinct_percentages) > 1:
+            rendered = ", ".join(f"{value:g}%" for value in distinct_percentages)
+            findings.append(
+                f"{path.name}:{line_of(source, cell.offset)}: cell {cell.w:g}x{cell.h:g} "
+                f"has conflicting percentage claims ({rendered}) — every hosted label "
+                "must state the same share"
+            )
             continue
 
-        # A label and the metadata are two statements of one fact. Let them
-        # disagree and the picture lies while the gate stays green.
-        percentage, _ = parse_claim(" ".join(labels[index]))
-        if percentage is not None and declared > 0:
+        if distinct_percentages and declared > 0:
+            percentage = distinct_percentages[0]
             drift = abs(percentage - declared)
             # 1pp covers honest rounding of a displayed integer percentage.
             if drift > 1.0:
