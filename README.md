@@ -424,8 +424,13 @@ diagram-design/
 │   ├── verify-screenshot-freshness.py — source + screenshot digest gate
 │   ├── verify-plugin-package.py     — version + marketplace package gate
 │   ├── test-plugin-package.py       — adversarial package-gate tests
+│   ├── lint-render.py               — Chromium rendered-layout checker
 │   ├── verify-doctor.py             — doctor diagnostics contract gate
 │   ├── test-verify-doctor.py        — doctor diagnostics adversarial tests
+│   ├── verify-polar.py              — quantitative polar encoding gate
+│   ├── test-verify-polar.py         — polar gate adversarial tests
+│   ├── verify-sankey.py             — Sankey conservation + geometry gate
+│   ├── test-verify-sankey.py        — Sankey gate adversarial tests
 │   ├── test-verify-docs-sync.py     — docs/routing-surface gate tests
 │   └── fixtures/
 │       ├── sample-flowchart.mmd

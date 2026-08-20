@@ -46,6 +46,7 @@ The helper refuses to run if the Claude and Codex versions already differ. If an
 | Semantic-pattern routing | `python3 scripts/verify-semantic-motion.py --markdown-only` |
 | Animated-example structure and accessibility | `python3 scripts/verify-semantic-motion.py --example-only` |
 | Skin conformance of every example and template (colors, fonts, a11y, assets, scripts) | `python3 scripts/lint-skin.py --all --baseline` |
+| Rendered-layout checker and shipped examples/templates | `python3 scripts/lint-render.py --self-test && python3 scripts/lint-render.py --all` |
 | Quantitative polar encoding and variant parity | `python3 scripts/test-verify-polar.py && python3 scripts/verify-polar.py` |
 | A single file, e.g. a new example | `python3 scripts/lint-skin.py skills/diagram-design/assets/example-my-type.html` |
 | Sequence-doc consistency (ATL fragments, budgets) | `python3 scripts/verify-sequence-oauth.py` |
@@ -55,7 +56,7 @@ The helper refuses to run if the Claude and Codex versions already differ. If an
 | Doctor diagnostics contract (env checks, script presence, routing wiring) | `python3 scripts/verify-doctor.py` |
 | Doctor diagnostics adversarial tests | `python3 scripts/test-verify-doctor.py` |
 | Every shipped motion template/example | `python3 scripts/verify-motion.py --shipped` |
-| Docs/routing sync (description hooks, gallery, README tree, reference links, strict-bundler support paths, profile surfaces) | `python3 scripts/verify-docs-sync.py && python3 scripts/test-verify-docs-sync.py` |
+| Docs/routing sync (description hooks, gallery, README tree, reference links, strict-bundler support paths, command/prompt surfaces) | `python3 scripts/verify-docs-sync.py && python3 scripts/test-verify-docs-sync.py` |
 | Canonical README screenshots match their example HTML sources and recorded PNG digests | `python3 scripts/verify-screenshot-freshness.py` |
 | Packaged output self-check behaves (pass + adversarial cases) | `python3 scripts/test-self-check.py` |
 | Label masks are never clipped by a node painted after them | `python3 scripts/verify-geometry.py --all` |
@@ -66,6 +67,8 @@ The helper refuses to run if the Claude and Codex versions already differ. If an
 | Dumbbell checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-dumbbell.py` |
 | Slopegraph axes share one scale and every endpoint matches its printed value | `python3 scripts/verify-slopegraph.py --all` |
 | Slopegraph checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-slopegraph.py` |
+| Sankey flow conservation and ribbon geometry | `python3 scripts/verify-sankey.py --all` |
+| Sankey checker behaves (pass + adversarial cases) | `python3 scripts/test-verify-sankey.py` |
 | Generated icon assets are up to date (`icons.html`, `primitive-icons.md`) | `python3 scripts/build-icons.py` then `git diff --exit-code` on the two generated files |
 
 The semantic-pattern gate also caps `skills/diagram-design/SKILL.md` at 40,000 bytes so the installed skill remains practical to load. If that gate fails, reduce duplication or move detail into a routed reference; do not remove routing vocabulary from frontmatter.
@@ -81,6 +84,8 @@ python3 scripts/test-plugin-package.py \
   && python3 scripts/verify-semantic-motion.py --example-only \
   && python3 scripts/verify-motion.py --shipped \
   && python3 scripts/lint-skin.py --all --baseline \
+  && python3 scripts/lint-render.py --self-test \
+  && python3 scripts/lint-render.py --all \
   && python3 scripts/test-verify-polar.py \
   && python3 scripts/verify-polar.py \
   && python3 scripts/verify-sequence-oauth.py \
@@ -101,7 +106,9 @@ python3 scripts/test-plugin-package.py \
   && python3 scripts/verify-dumbbell.py \
   && python3 scripts/test-verify-dumbbell.py \
   && python3 scripts/verify-slopegraph.py --all \
-  && python3 scripts/test-verify-slopegraph.py
+  && python3 scripts/test-verify-slopegraph.py \
+  && python3 scripts/verify-sankey.py --all \
+  && python3 scripts/test-verify-sankey.py
 ```
 
 ### If a gate fails
