@@ -667,6 +667,45 @@ def network_isolation_failures(context):
     return []
 
 
+def gallery_mobile_failures(context):
+    """Keep the wrapped gallery controls from collapsing its mobile preview."""
+    failures = []
+    page = context.new_page()
+    page.set_viewport_size({"width": 390, "height": 844})
+    try:
+        page.goto((ASSET_DIR / "index.html").as_uri(), wait_until="load")
+        page.locator('[data-type="polar"]').click()
+        page.wait_for_function(
+            "document.querySelector('#preview').src.endsWith('example-polar.html')"
+        )
+        facts = page.evaluate(
+            """
+            () => {
+              const doc = document.documentElement;
+              const preview = document.querySelector('#preview');
+              const rect = preview.getBoundingClientRect();
+              return {
+                previewHeight: rect.height,
+                pageOverflow: doc.scrollWidth - doc.clientWidth,
+              };
+            }
+            """
+        )
+        if facts["previewHeight"] < 400:
+            failures.append(
+                "gallery-mobile-preview: iframe height "
+                f"{facts['previewHeight']:.1f}px is below the 400px minimum"
+            )
+        if facts["pageOverflow"] > TOLERANCE:
+            failures.append(
+                "gallery-mobile-overflow: page extends "
+                f"{facts['pageOverflow']:.1f}px past the mobile viewport"
+            )
+    finally:
+        page.close()
+    return failures
+
+
 def self_test(context):
     page = context.new_page()
     failures = []
@@ -735,6 +774,9 @@ def self_test(context):
 
     checks += 1
     failures += network_isolation_failures(context)
+
+    checks += 1
+    failures += gallery_mobile_failures(context)
 
     if failures:
         print("self-test FAILED:")
