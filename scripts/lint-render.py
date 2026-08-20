@@ -667,17 +667,21 @@ def network_isolation_failures(context):
     return []
 
 
-def gallery_mobile_failures(context):
+def gallery_mobile_failures(context, gallery_path=None):
     """Keep the wrapped gallery controls from collapsing its mobile preview."""
+    gallery_path = gallery_path or ASSET_DIR / "index.html"
     failures = []
     page = context.new_page()
     page.set_viewport_size({"width": 390, "height": 844})
     try:
-        page.goto((ASSET_DIR / "index.html").as_uri(), wait_until="load")
+        page.goto(gallery_path.as_uri(), wait_until="load")
         page.locator('[data-type="polar"]').click()
-        page.wait_for_function(
-            "document.querySelector('#preview').src.endsWith('example-polar.html')"
-        )
+        routed_source = page.locator("#preview").get_attribute("src")
+        if routed_source != "example-polar.html":
+            failures.append(
+                "gallery-mobile-routing: Polar routed to "
+                f"{routed_source!r}, expected 'example-polar.html'"
+            )
         facts = page.evaluate(
             """
             () => {
@@ -777,6 +781,26 @@ def self_test(context):
 
     checks += 1
     failures += gallery_mobile_failures(context)
+
+    # A broken route should be a targeted failure, not a delayed Playwright
+    # timeout or traceback that escapes the self-test report.
+    checks += 1
+    with tempfile.TemporaryDirectory() as directory:
+        broken_gallery = Path(directory) / "index.html"
+        gallery_source = (ASSET_DIR / "index.html").read_text(encoding="utf-8")
+        route_line = "const src = `example-${state.type}${state.variant}.html`;"
+        if gallery_source.count(route_line) != 1:
+            failures.append("gallery-mobile-routing-fixture: route source changed unexpectedly")
+        else:
+            broken_gallery.write_text(
+                gallery_source.replace(route_line, 'const src = "wrong-example.html";'),
+                encoding="utf-8",
+            )
+            route_failures = gallery_mobile_failures(context, broken_gallery)
+            if not any(
+                failure.startswith("gallery-mobile-routing:") for failure in route_failures
+            ):
+                failures.append("gallery-mobile-routing: broken route was not reported")
 
     if failures:
         print("self-test FAILED:")
