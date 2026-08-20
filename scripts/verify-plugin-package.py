@@ -303,6 +303,8 @@ def valid_double_quoted_yaml_scalar(value: str) -> bool:
         encoded = body[index + 1 : index + 1 + digits]
         if len(encoded) != digits or re.fullmatch(r"[0-9A-Fa-f]+", encoded) is None:
             return False
+        if int(encoded, 16) > 0x10FFFF:
+            return False
         index += 1 + digits
     return True
 
