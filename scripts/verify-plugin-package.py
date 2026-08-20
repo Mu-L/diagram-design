@@ -280,6 +280,33 @@ def verify_codex_skill_path(root: Path, codex_manifest: dict[str, Any], errors: 
         errors.append(f"Codex skills path does not contain {PLUGIN_NAME}/SKILL.md")
 
 
+def valid_double_quoted_yaml_scalar(value: str) -> bool:
+    """Validate escapes in the single-line double-quoted YAML subset we accept."""
+    match = re.fullmatch(r'"(?P<body>(?:[^"\\]|\\.)*)"(?:\s+#.*)?', value)
+    if match is None:
+        return False
+    body = match.group("body")
+    simple_escapes = set('0abtnvfre "\\/N_LP')
+    index = 0
+    while index < len(body):
+        if body[index] != "\\":
+            index += 1
+            continue
+        index += 1
+        escape = body[index]
+        if escape in simple_escapes:
+            index += 1
+            continue
+        digits = {"x": 2, "u": 4, "U": 8}.get(escape)
+        if digits is None:
+            return False
+        encoded = body[index + 1 : index + 1 + digits]
+        if len(encoded) != digits or re.fullmatch(r"[0-9A-Fa-f]+", encoded) is None:
+            return False
+        index += 1 + digits
+    return True
+
+
 def parse_frontmatter_metadata_version(text: str) -> str | None:
     """Return exactly one direct ``metadata.version`` from YAML frontmatter.
 
@@ -343,9 +370,11 @@ def parse_frontmatter_metadata_version(text: str) -> str | None:
             # YAML from being mistaken for valid metadata without a YAML runtime.
             if value[0] in "[{|>" or any(char in value for char in "[]{}"):
                 return None
-            if value[0] in "\"'":
-                quote = value[0]
-                if re.fullmatch(rf"{quote}[^{quote}]*{quote}(?:\s+#.*)?", value) is None:
+            if value[0] == '"':
+                if not valid_double_quoted_yaml_scalar(value):
+                    return None
+            elif value[0] == "'":
+                if re.fullmatch(r"'[^']*'(?:\s+#.*)?", value) is None:
                     return None
             elif ": " in value:
                 return None

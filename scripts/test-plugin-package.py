@@ -374,6 +374,33 @@ def test_verifier() -> None:
             "frontmatter has no metadata.version",
         )
 
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\ndescription: "bad\\q"\n'
+            'metadata:\n  version: "1.2"\n---\n',
+            encoding="utf-8",
+        )
+        expect_failure(
+            "invalid double-quoted YAML escape",
+            VERIFY.verify_package(root, "HEAD"),
+            "frontmatter has no metadata.version",
+        )
+
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\ndescription: "line one\\nline two and '
+            '\\"quoted\\" with unicode \\u2192"\nmetadata:\n  version: "1.2"\n---\n',
+            encoding="utf-8",
+        )
+        errors = VERIFY.verify_package(root, "HEAD")
+        if errors:
+            raise AssertionError(f"valid escaped YAML scalar failed: {errors}")
+        print("OK: valid double-quoted YAML escapes accepted")
+
 
 def test_bumper() -> None:
     cases = (("patch", "1.2.4"), ("minor", "1.3.0"), ("major", "2.0.0"))
