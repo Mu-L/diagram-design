@@ -47,7 +47,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ASSET_DIR = ROOT / "skills/diagram-design/assets"
 
-CELL_RE = re.compile(r'<rect\b(?P<attrs>[^>]*\brx="2"[^>]*?)/?>', re.IGNORECASE)
+CELL_RE = re.compile(r"<rect\b(?P<attrs>[^>]*)/?>", re.IGNORECASE)
 TEXT_RE = re.compile(r"<text\b(?P<attrs>[^>]*)>(?P<body>.*?)</text>", re.IGNORECASE | re.DOTALL)
 CIRCLE_RE = re.compile(r"<circle\b(?P<attrs>[^>]*)/?>", re.IGNORECASE)
 ATTR_RE = re.compile(r'(?P<name>[\w:-]+)="(?P<value>[^"]*)"')
@@ -147,7 +147,7 @@ def estimated_advance(text: str, mono: bool) -> float:
     return advance
 
 
-def parse_cells(source: str) -> list[Box]:
+def parse_cells(source: str, findings: list[str] | None = None) -> list[Box]:
     """Deduped cell rects. Each cell is painted twice: paper mask, then body.
 
     `data-share` may sit on either rect of the pair, so the declared share is
@@ -156,6 +156,9 @@ def parse_cells(source: str) -> list[Box]:
     seen: list[Box] = []
     for m in CELL_RE.finditer(source):
         attrs = {a.group("name"): a.group("value") for a in ATTR_RE.finditer(m.group("attrs"))}
+        has_share_metadata = "data-share" in attrs
+        if attrs.get("rx") != "2" and not has_share_metadata:
+            continue
         try:
             box = Box(
                 float(attrs["x"]),
@@ -164,7 +167,23 @@ def parse_cells(source: str) -> list[Box]:
                 float(attrs["height"]),
                 m.start(),
             )
-        except (KeyError, ValueError):
+        except (KeyError, ValueError) as exc:
+            if has_share_metadata and findings is not None:
+                findings.append(
+                    f"line {line_of(source, m.start())}: data-share rect has missing or "
+                    f"unparseable x/y/width/height geometry ({exc})"
+                )
+            continue
+        coordinates = (box.x, box.y, box.w, box.h)
+        if has_share_metadata and (
+            not all(math.isfinite(value) for value in coordinates) or box.w <= 0 or box.h <= 0
+        ):
+            if findings is not None:
+                findings.append(
+                    f"line {line_of(source, m.start())}: data-share rect geometry must have "
+                    "finite x/y/width/height and strictly positive width/height; "
+                    f"got x={box.x:g}, y={box.y:g}, width={box.w:g}, height={box.h:g}"
+                )
             continue
         if "data-share" in attrs:
             raw_share = attrs["data-share"]
@@ -181,13 +200,6 @@ def parse_cells(source: str) -> list[Box]:
                     )
                 else:
                     box.share = parsed_share
-        # Metadata is an explicit declaration that this rect is a treemap
-        # cell. Keep even sub-threshold cells (the narrowest slivers are the
-        # easiest to distort), and keep their same-geometry masks long enough
-        # to associate the mask/body pair below. Unmarked decorative rects are
-        # filtered only after all pairs have been assembled.
-        if box.w > CELL_MAX_W or box.h > CELL_MAX_H:
-            continue
         twin = next(
             (
                 s
@@ -216,7 +228,9 @@ def parse_cells(source: str) -> list[Box]:
     return [
         box
         for box in seen
-        if box.area >= CELL_MIN_AREA or box.share is not None or box.share_errors
+        if box.share is not None
+        or box.share_errors
+        or (box.area >= CELL_MIN_AREA and box.w <= CELL_MAX_W and box.h <= CELL_MAX_H)
     ]
 
 
@@ -280,14 +294,17 @@ def parse_claim(text: str) -> tuple[float | None, float | None]:
 
 def check(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
-    cells = parse_cells(source)
+    findings: list[str] = []
+    parse_findings: list[str] = []
+    cells = parse_cells(source, parse_findings)
+    findings.extend(f"{path.name}:{finding}" for finding in parse_findings)
     if len(cells) < 3:
-        return [
+        findings.append(
             f"{path.name}: expected at least 3 parseable treemap cells, found {len(cells)} — "
             "the area contract cannot be verified"
-        ]
+        )
+        return findings
 
-    findings: list[str] = []
     labels: dict[int, list[str]] = {index: [] for index in range(len(cells))}
 
     for m in TEXT_RE.finditer(source):
@@ -397,6 +414,11 @@ def check(path: Path) -> list[str]:
         return findings
 
     drawn_total = sum(cell.area for cell in cells)
+    if not math.isfinite(drawn_total) or drawn_total <= 0:
+        findings.append(
+            f"{path.name}: parsed cell area total must be finite and positive; got {drawn_total:g}"
+        )
+        return findings
     if any(cell.share_errors for cell in cells):
         return findings
 

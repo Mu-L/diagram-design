@@ -347,6 +347,33 @@ def test_verifier() -> None:
             "frontmatter has no metadata.version",
         )
 
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\nmetadata:\n  version:"1.2"\n---\n',
+            encoding="utf-8",
+        )
+        expect_failure(
+            "version value without YAML separation",
+            VERIFY.verify_package(root, "HEAD"),
+            "frontmatter has no metadata.version",
+        )
+
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\ndescription: broken: value\n'
+            'metadata:\n  version: "1.2"\n---\n',
+            encoding="utf-8",
+        )
+        expect_failure(
+            "unquoted colon in frontmatter scalar",
+            VERIFY.verify_package(root, "HEAD"),
+            "frontmatter has no metadata.version",
+        )
+
 
 def test_bumper() -> None:
     cases = (("patch", "1.2.4"), ("minor", "1.3.0"), ("major", "2.0.0"))

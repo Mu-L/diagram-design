@@ -311,7 +311,7 @@ def parse_frontmatter_metadata_version(text: str) -> str | None:
         if "\t" in raw_line:
             return None
         match = re.fullmatch(
-            r"(?P<indent> *)(?P<key>[A-Za-z_][\w.-]*):(?P<value>.*)",
+            r"(?P<indent> *)(?P<key>[A-Za-z_][\w.-]*):(?P<value>(?: +.*)?)",
             raw_line,
         )
         if match is None:
@@ -347,6 +347,8 @@ def parse_frontmatter_metadata_version(text: str) -> str | None:
                 quote = value[0]
                 if re.fullmatch(rf"{quote}[^{quote}]*{quote}(?:\s+#.*)?", value) is None:
                     return None
+            elif ": " in value:
+                return None
 
         entries.append((parent, key, value))
         if opens_mapping:

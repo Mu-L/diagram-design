@@ -13,6 +13,7 @@ Exit: 0 all pass, 1 a case failed.
 from __future__ import annotations
 
 import runpy
+import re
 import subprocess
 import sys
 import tempfile
@@ -388,6 +389,7 @@ def main() -> int:
 
         # 12. A treemap with too few parseable cells is unchecked, not clean.
         unparsable = source.replace(' rx="2"', ' rx="3"')
+        unparsable = re.sub(r' data-share="[^"]+"', "", unparsable)
         code, output = run(write(directory, "too-few-cells.html", unparsable))
         if code == 0:
             failures.append("a treemap with no parseable cells was accepted")
@@ -427,6 +429,17 @@ def main() -> int:
             else:
                 print("OK: metadata-bearing cells bypass the decorative-area threshold")
 
+        no_rounding_marker = source.replace(
+            'rx="2" data-share="0.56"', 'rx="3" data-share="0.56"', 1
+        )
+        code, output = run(write(directory, "metadata-with-nonstandard-rx.html", no_rounding_marker))
+        if code != 0:
+            failures.append(
+                f"an otherwise valid data-share rect depended on decorative rx=2: {output.strip()}"
+            )
+        else:
+            print("OK: data-share identifies a cell independently of decorative rx")
+
         # 14. Every percentage claim hosted by a cell must agree. Reading only
         #     the first match accepted a later contradiction when 59% appeared
         #     before 42% in the same cell.
@@ -442,6 +455,62 @@ def main() -> int:
             failures.append(f"conflicting labels lacked the right finding: {output.strip()}")
         else:
             print("OK: every hosted percentage claim must agree")
+
+        # 15. Explicit metadata outranks both sides of the decorative-rect
+        #     heuristic. A declared cell cannot disappear merely because a bad
+        #     edit makes it implausibly wide or tall.
+        for label, old, new, dimensions in (
+            (
+                "above-max-width",
+                '<rect x="940" y="296" width="16" height="124"',
+                '<rect x="40" y="296" width="901" height="124"',
+                "901x124",
+            ),
+            (
+                "above-max-height",
+                '<rect x="940" y="296" width="16" height="124"',
+                '<rect x="940" y="40" width="16" height="461"',
+                "16x461",
+            ),
+        ):
+            oversized_declared = source.replace(old, new)
+            if oversized_declared == source:
+                failures.append(f"could not build the {label} fixture")
+                continue
+            code, output = run(write(directory, f"{label}.html", oversized_declared))
+            if code == 0:
+                failures.append(f"metadata-bearing {label} cell was discarded")
+            elif f"cell {dimensions}" not in output:
+                failures.append(f"{label} cell was not retained: {output.strip()}")
+            else:
+                print(f"OK: metadata-bearing {label} cells bypass decorative limits")
+
+        # 16. Geometry on a declared cell is untrusted metadata too. Missing,
+        #     malformed, non-finite, zero, or negative dimensions must be a
+        #     finding and must never poison the area total with NaN/Infinity.
+        asia_declared = (
+            '<rect x="40" y="40" width="532" height="380" rx="2" '
+            'data-share="59.04"'
+        )
+        for label, replacement in (
+            ("missing", '<rect x="40" y="40" height="380" rx="2" data-share="59.04"'),
+            ("nonnumeric", asia_declared.replace('width="532"', 'width="wide"')),
+            ("nan", asia_declared.replace('width="532"', 'width="NaN"')),
+            ("infinity", asia_declared.replace('width="532"', 'width="Infinity"')),
+            ("zero", asia_declared.replace('width="532"', 'width="0"')),
+            ("negative", asia_declared.replace('width="532"', 'width="-1"')),
+        ):
+            bad_geometry = source.replace(asia_declared, replacement, 1)
+            if bad_geometry == source:
+                failures.append(f"could not build the {label}-geometry fixture")
+                continue
+            code, output = run(write(directory, f"geometry-{label}.html", bad_geometry))
+            if code == 0:
+                failures.append(f"{label} data-share geometry was accepted")
+            elif "data-share rect" not in output:
+                failures.append(f"{label} geometry lacked an explicit finding: {output.strip()}")
+            else:
+                print(f"OK: {label} data-share geometry fails closed")
 
     for failure in failures:
         print(f"FAIL: {failure}")
