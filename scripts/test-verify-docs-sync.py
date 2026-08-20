@@ -105,6 +105,15 @@ From a repository checkout, run `python3 <repo-root>/scripts/verify-geometry.py 
         if errors != [expected]:
             raise AssertionError(f"unsafe packaged reference was not rejected: {errors}")
 
+        errors = []
+        verify.check_packaged_support_references(
+            errors,
+            "See [unsafe](references/%2e%2e%5csecrets.md).",
+            skill,
+        )
+        if len(errors) != 1 or "unsafe packaged support path" not in errors[0]:
+            raise AssertionError(f"encoded Windows traversal was not rejected: {errors}")
+
         root = Path(temp_dir) / "repo"
         profile_reference = root / "skills/diagram-design/references/profiles.md"
         command = root / "commands/profile.md"

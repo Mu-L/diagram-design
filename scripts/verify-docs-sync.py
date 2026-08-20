@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -174,15 +174,18 @@ def check_packaged_support_references(
 ) -> None:
     """Require every scanner-visible path to be a safe, packaged file."""
     for target in scanner_visible_support_references(markdown):
-        parts = Path(target).parts
+        normalized_target = target.replace("\\", "/")
+        path = PurePosixPath(normalized_target)
+        parts = [part for part in path.parts if part not in {"", "."}]
         if (
             not parts
             or parts[0] not in SUPPORT_DIRECTORIES
-            or target.startswith("/")
-            or any(part in {"", ".", ".."} for part in parts)
+            or normalized_target.startswith("/")
+            or path.is_absolute()
+            or any(part == ".." or ":" in part for part in parts)
         ):
             errors.append(f"SKILL.md exposes unsafe packaged support path {target!r}")
-        elif not (skill_directory / target).is_file():
+        elif not (skill_directory / "/".join(parts)).is_file():
             errors.append(
                 f"SKILL.md exposes missing packaged support file {target!r}; "
                 "strict skill bundlers will abort installation"
