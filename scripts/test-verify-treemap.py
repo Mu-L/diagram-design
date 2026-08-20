@@ -314,6 +314,88 @@ def main() -> int:
             else:
                 print("OK: a label contradicting its cell's declared share is rejected")
 
+        # 9. Invalid shares fail closed without raising or slipping through
+        #    float edge cases. Zero used to divide by zero; NaN/Infinity made
+        #    comparisons false; negative and >100 values are not shares of a
+        #    whole even though float() accepts them.
+        for label, value in (
+            ("non-numeric", "unknown"),
+            ("zero", "0"),
+            ("negative", "-1"),
+            ("non-finite-nan", "NaN"),
+            ("non-finite-infinity", "Infinity"),
+            ("over-100", "101"),
+        ):
+            invalid = source.replace('data-share="59.04"', f'data-share="{value}"', 1)
+            if invalid == source:
+                failures.append(f"could not build the {label}-share fixture")
+                continue
+            code, output = run(write(directory, f"share-{label}.html", invalid))
+            if code == 0:
+                failures.append(f"{label} data-share was accepted")
+            elif "invalid share metadata" not in output:
+                failures.append(f"{label} share lacked a metadata finding: {output.strip()}")
+            else:
+                print(f"OK: {label} data-share fails closed")
+
+        # 10. The mask/body pair is one logical cell. If both copies state a
+        #     share, they must agree; retaining whichever rect was parsed first
+        #     silently discards contradictory source data.
+        asia_mask = '<rect x="40" y="40" width="532" height="380" rx="2" fill="#f5f5f5"/>'
+        conflicting = source.replace(
+            asia_mask,
+            asia_mask.replace(' fill=', ' data-share="42" fill='),
+            1,
+        )
+        if conflicting == source:
+            failures.append("could not build the conflicting-twin fixture")
+        else:
+            code, output = run(write(directory, "conflicting-twins.html", conflicting))
+            if code == 0:
+                failures.append("conflicting duplicate data-share values were accepted")
+            elif "conflicting data-share" not in output:
+                failures.append(f"conflicting twins lacked the right finding: {output.strip()}")
+            else:
+                print("OK: conflicting mask/body shares are rejected")
+
+        asia_body = (
+            '<rect x="40" y="40" width="532" height="380" rx="2" '
+            'data-share="59.04" fill="rgba(235,108,54,0.16)" '
+            'stroke="#eb6c36" stroke-width="1.5"/>'
+        )
+        triplicated = source.replace(asia_body, f"{asia_body}\n      {asia_body}", 1)
+        if triplicated == source:
+            failures.append("could not build the triplicated-cell fixture")
+        else:
+            code, output = run(write(directory, "triplicated-cell.html", triplicated))
+            if code == 0:
+                failures.append("a triplicated logical cell was silently deduplicated")
+            elif "duplicate rects" not in output:
+                failures.append(f"triplicated cell lacked the right finding: {output.strip()}")
+            else:
+                print("OK: extra duplicate cell rects are rejected")
+
+        # 11. The shares describe one whole, so a plausible individual number
+        #     cannot hide an incomplete or over-counted set.
+        incomplete_total = source.replace('data-share="59.04"', 'data-share="50"', 1)
+        code, output = run(write(directory, "incomplete-share-total.html", incomplete_total))
+        if code == 0:
+            failures.append("data-share values that do not total the whole were accepted")
+        elif "not approximately 100%" not in output:
+            failures.append(f"bad share total lacked the right finding: {output.strip()}")
+        else:
+            print("OK: shares must total approximately 100%")
+
+        # 12. A treemap with too few parseable cells is unchecked, not clean.
+        unparsable = source.replace(' rx="2"', ' rx="3"')
+        code, output = run(write(directory, "too-few-cells.html", unparsable))
+        if code == 0:
+            failures.append("a treemap with no parseable cells was accepted")
+        elif "expected at least 3 parseable treemap cells" not in output:
+            failures.append(f"too-few-cells fixture lacked the right finding: {output.strip()}")
+        else:
+            print("OK: too few parseable cells fails closed")
+
     for failure in failures:
         print(f"FAIL: {failure}")
     if failures:

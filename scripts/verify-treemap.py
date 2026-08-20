@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import math
 import re
 import sys
 import unicodedata
@@ -81,7 +82,16 @@ MARKER_EPSILON = 0.01
 
 
 class Box:
-    __slots__ = ("x", "y", "w", "h", "offset", "share")
+    __slots__ = (
+        "x",
+        "y",
+        "w",
+        "h",
+        "offset",
+        "share",
+        "share_errors",
+        "rect_count",
+    )
 
     def __init__(
         self, x: float, y: float, w: float, h: float, offset: int = 0, share: float | None = None
@@ -90,6 +100,8 @@ class Box:
         # Declared share of the whole, from data-share. None means the cell
         # never stated one, which for a treemap is itself a finding.
         self.share = share
+        self.share_errors: list[str] = []
+        self.rect_count = 1
 
     @property
     def right(self) -> float:
@@ -155,10 +167,20 @@ def parse_cells(source: str) -> list[Box]:
         except (KeyError, ValueError):
             continue
         if "data-share" in attrs:
+            raw_share = attrs["data-share"]
             try:
-                box.share = float(attrs["data-share"])
+                parsed_share = float(raw_share)
             except ValueError:
-                box.share = None
+                box.share_errors.append(f"data-share {raw_share!r} is not numeric")
+            else:
+                if not math.isfinite(parsed_share):
+                    box.share_errors.append(f"data-share {raw_share!r} is not finite")
+                elif not 0 < parsed_share <= 100:
+                    box.share_errors.append(
+                        f"data-share {raw_share!r} must be greater than 0 and at most 100"
+                    )
+                else:
+                    box.share = parsed_share
         if box.area < CELL_MIN_AREA or box.w > CELL_MAX_W or box.h > CELL_MAX_H:
             continue
         twin = next(
@@ -173,6 +195,15 @@ def parse_cells(source: str) -> list[Box]:
             None,
         )
         if twin is not None:
+            twin.rect_count += 1
+            twin.share_errors.extend(box.share_errors)
+            if twin.share is not None and box.share is not None and not math.isclose(
+                twin.share, box.share, rel_tol=0.0, abs_tol=1e-9
+            ):
+                twin.share_errors.append(
+                    f"duplicate rects declare conflicting data-share values "
+                    f"{twin.share:g} and {box.share:g}"
+                )
             if twin.share is None:
                 twin.share = box.share
             continue
@@ -242,7 +273,10 @@ def check(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     cells = parse_cells(source)
     if len(cells) < 3:
-        return []
+        return [
+            f"{path.name}: expected at least 3 parseable treemap cells, found {len(cells)} — "
+            "the area contract cannot be verified"
+        ]
 
     findings: list[str] = []
     labels: dict[int, list[str]] = {index: [] for index in range(len(cells))}
@@ -329,7 +363,19 @@ def check(path: Path) -> list[str]:
     # likely to be wrong is not the one exempt from checking. Deriving the
     # basis from in-cell labels instead leaves an unlabelled sliver - exactly
     # the cell a 4px grid distorts most - verified by nothing at all.
-    undeclared = [cell for cell in cells if cell.share is None]
+    for cell in cells:
+        for error in cell.share_errors:
+            findings.append(
+                f"{path.name}:{line_of(source, cell.offset)}: cell {cell.w:g}x{cell.h:g} "
+                f"has invalid share metadata: {error}"
+            )
+        if cell.rect_count > 2:
+            findings.append(
+                f"{path.name}:{line_of(source, cell.offset)}: cell {cell.w:g}x{cell.h:g} "
+                f"is painted by {cell.rect_count} duplicate rects — expected at most a mask/body pair"
+            )
+
+    undeclared = [cell for cell in cells if cell.share is None and not cell.share_errors]
     if undeclared:
         # Fail closed. A treemap whose cells cannot be parsed is not a passing
         # treemap; it is an unchecked one, and saying "OK" to it is the bug.
@@ -342,8 +388,15 @@ def check(path: Path) -> list[str]:
         return findings
 
     drawn_total = sum(cell.area for cell in cells)
+    if any(cell.share_errors for cell in cells):
+        return findings
+
     share_total = sum(cell.share for cell in cells if cell.share is not None)
-    if share_total <= 0:
+    if not 99.0 <= share_total <= 101.0:
+        findings.append(
+            f"{path.name}: data-share values total {share_total:g}%, not approximately 100% — "
+            "every cell must declare its share of the same whole"
+        )
         return findings
 
     for index, cell in enumerate(cells):

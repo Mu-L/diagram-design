@@ -279,6 +279,32 @@ def test_verifier() -> None:
             "could not read",
         )
 
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\n---\n\nExample only:\nversion: "1.2"\n',
+            encoding="utf-8",
+        )
+        expect_failure(
+            "version line outside frontmatter",
+            VERIFY.verify_package(root, "HEAD"),
+            "frontmatter has no metadata.version",
+        )
+
+    with package_repo() as root:
+        set_versions(root, "1.2.4", "1.2.4")
+        skill = root / "skills" / PLUGIN_NAME / "SKILL.md"
+        skill.write_text(
+            f'---\nname: {PLUGIN_NAME}\nversion: "1.2"\nmetadata:\n  owner: test\n---\n',
+            encoding="utf-8",
+        )
+        expect_failure(
+            "version outside metadata mapping",
+            VERIFY.verify_package(root, "HEAD"),
+            "frontmatter has no metadata.version",
+        )
+
 
 def test_bumper() -> None:
     cases = (("patch", "1.2.4"), ("minor", "1.3.0"), ("major", "2.0.0"))
