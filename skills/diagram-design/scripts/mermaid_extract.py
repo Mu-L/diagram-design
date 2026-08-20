@@ -1289,7 +1289,6 @@ def select_diagrams(diagrams: list[Diagram], selector: str | None) -> list[Diagr
 
 
 def main(argv: list[str] | None = None) -> int:
-    _configure_stdout_utf8()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("file", help=".mmd, .mermaid, or Markdown with mermaid fences")
     parser.add_argument(
@@ -1330,4 +1329,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    _configure_stdout_utf8()
     raise SystemExit(main())

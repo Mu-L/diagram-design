@@ -854,7 +854,6 @@ def select_pages(pages: list[Page], selector: str | None) -> list[Page]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    _configure_stdout_utf8()
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("file", help=".drawio / .xml / .drawio.png / .drawio.svg")
     parser.add_argument(
@@ -894,4 +893,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    _configure_stdout_utf8()
     raise SystemExit(main())

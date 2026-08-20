@@ -10,7 +10,9 @@ Exit 0 only when all gates pass. Intended for local/PR checks alongside:
 from __future__ import annotations
 
 import base64
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -99,6 +101,23 @@ def check_legacy_stdout_encoding(tmp: Path) -> None:
     )
     if file_process.returncode != 0 or destination.read_text(encoding="utf-8") != output:
         fail("draw.io --out no longer matches its UTF-8 stdout digest")
+
+    class CallerOwnedStdout(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.reconfigured = False
+
+        def reconfigure(self, **_kwargs: object) -> None:
+            self.reconfigured = True
+
+    caller_stdout = CallerOwnedStdout()
+    extractor = load_extractor_module()
+    with contextlib.redirect_stdout(caller_stdout):
+        result = extractor.main([str(source)])
+    if result != 0 or caller_stdout.reconfigured:
+        fail("imported draw.io main() reconfigured its caller-owned stdout")
+    if "登录" not in caller_stdout.getvalue():
+        fail("imported draw.io main() did not write to its caller-owned stdout")
     ok("draw.io stdout stays lossless UTF-8 under a legacy Windows encoding")
 
 
