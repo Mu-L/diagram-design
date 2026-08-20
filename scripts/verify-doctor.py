@@ -21,6 +21,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SKILL_RELATIVE = Path("skills/diagram-design/SKILL.md")
 
+MAINTAINER_MARKERS = (
+    Path("CONTRIBUTING.md"),
+    Path(".github/workflows/ci.yml"),
+    Path("scripts/verify-plugin-package.py"),
+)
+
 EXPECTED_SCRIPTS = (
     Path("scripts/verify-drawio-import.py"),
     Path("scripts/verify-mermaid-import.py"),
@@ -188,7 +194,30 @@ def check_playwright(python_cmd: str | None) -> CheckResult:
     )
 
 
+def is_maintainer_checkout(root: Path) -> bool:
+    """Return whether root is a source checkout with maintainer-only surfaces."""
+    return all((root / marker).is_file() for marker in MAINTAINER_MARKERS)
+
+
+def resolve_skill_file(root: Path) -> Path | None:
+    """Find SKILL.md in either a repository/plugin root or standalone skill root."""
+    repository_skill = root / SKILL_RELATIVE
+    if repository_skill.is_file():
+        return repository_skill
+    standalone_skill = root / "SKILL.md"
+    if standalone_skill.is_file():
+        return standalone_skill
+    return None
+
+
 def check_expected_scripts(root: Path) -> CheckResult:
+    if not is_maintainer_checkout(root):
+        return CheckResult(
+            name="Expected script presence",
+            status=PASS,
+            message="Installed-skill mode detected; maintainer-only repository scripts are not required.",
+        )
+
     missing = [path.as_posix() for path in EXPECTED_SCRIPTS if not (root / path).is_file()]
     if missing:
         return CheckResult(
@@ -205,6 +234,13 @@ def check_expected_scripts(root: Path) -> CheckResult:
 
 
 def check_routing_surfaces(root: Path) -> CheckResult:
+    if not is_maintainer_checkout(root):
+        return CheckResult(
+            name="Plugin wiring surfaces",
+            status=PASS,
+            message="Installed-skill mode detected; maintainer command/prompt wiring is not required.",
+        )
+
     missing_files: list[str] = []
     mismatched: list[str] = []
 
@@ -241,12 +277,11 @@ def check_common_path_mistakes(root: Path, cwd: Path) -> CheckResult:
     warnings: list[str] = []
     fixes: list[str] = []
 
-    if not (cwd / SKILL_RELATIVE).is_file():
+    if resolve_skill_file(root) is None:
         warnings.append(
-            "Current working directory does not look like the repository root "
-            "(missing skills/diagram-design/SKILL.md relative to CWD)."
+            "Diagram Design SKILL.md was not found under the resolved installation root."
         )
-        fixes.append(f"cd {root}")
+        fixes.append("Reinstall or update Diagram Design, then run the doctor again.")
 
     if platform.system().lower().startswith("win") and " " in str(cwd):
         warnings.append(

@@ -4,6 +4,18 @@ Load this file when the user asks to run diagnostics, health checks, or first-ru
 
 The goal is a one-shot report that checks local readiness for Diagram Design import/export and command routing, without mutating user files or installing dependencies.
 
+Resolve the Diagram Design installation from this loaded reference, not from the
+user's current working directory. A normal project directory is the expected
+place to invoke the doctor and must not be treated as a repository-path error.
+
+Use two diagnostic modes:
+
+- **Installed-skill mode** (default): check the runtime and the resolved skill
+  installation. Do not require maintainer-only repository files.
+- **Maintainer-checkout mode**: use this only when the resolved installation
+  root contains `CONTRIBUTING.md`, `.github/workflows/ci.yml`, and
+  `scripts/verify-plugin-package.py`. Add the repository integrity checks below.
+
 ## Inputs
 
 Optional flags:
@@ -30,16 +42,18 @@ Run all checks in this order and report each as `pass`, `warn`, or `fail`.
   - `pip install playwright && playwright install chromium`
 - Never auto-install dependencies.
 
-3. Expected script presence
+3. Expected script presence (maintainer-checkout mode only)
 - Verify these repository scripts exist:
   - `scripts/verify-drawio-import.py`
   - `scripts/verify-mermaid-import.py`
   - `scripts/verify-motion.py`
   - `scripts/lint-skin.py`
   - `scripts/verify-docs-sync.py`
-- Missing scripts are `fail`.
+- Missing scripts are `fail` in maintainer-checkout mode.
+- In installed-skill mode, report that maintainer scripts are not applicable;
+  their absence is not a warning or failure.
 
-4. Plugin wiring surfaces
+4. Plugin wiring surfaces (maintainer-checkout mode only)
 - Verify Claude command files exist and point to their references:
   - `commands/export-diagram.md` -> `references/export.md`
   - `commands/import-drawio.md` -> `references/import-drawio.md`
@@ -53,12 +67,18 @@ Run all checks in this order and report each as `pass`, `warn`, or `fail`.
   - `prompts/doctor.md` -> `references/doctor.md`
 - Missing files are `fail`.
 - Mismatched reference routing is `fail`.
+- In installed-skill mode, report that maintainer command/prompt wiring is not
+  applicable; partial or absent repository routing trees are not failures.
 
 5. Common path mistakes
-- Detect when running outside the repo root (missing `skills/diagram-design/SKILL.md` relative to current working directory).
+- Verify `SKILL.md` beneath the resolved installation root. Do not search for it
+  relative to the user's current project and do not instruct users to enter the
+  maintainer repository.
 - Detect Windows path quoting risk when paths contain spaces and the provided command examples omit quotes.
 - Detect references to local installed skill paths that do not exist (if command output includes one).
 - Mark these as `warn` with a precise fix suggestion.
+- A missing resolved `SKILL.md` should suggest reinstalling or updating Diagram
+  Design, not changing into a repository checkout.
 
 ## Output contract
 

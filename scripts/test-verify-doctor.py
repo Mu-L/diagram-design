@@ -32,6 +32,8 @@ def touch(path: Path, content: str = "placeholder\n") -> None:
 
 def seed_repo(module, root: Path) -> None:
     touch(root / "skills/diagram-design/SKILL.md", "# Skill\n")
+    for relative in module.MAINTAINER_MARKERS:
+        touch(root / relative)
     for relative in module.EXPECTED_SCRIPTS:
         touch(root / relative)
     for relative, reference in module.ROUTING_SURFACES.items():
@@ -77,6 +79,24 @@ def main() -> int:
         if check.status not in (verify.PASS, verify.WARN):
             raise AssertionError(f"unexpected common path status: {check.status}")
         print("OK: common path check returns non-fail in normal repository roots")
+
+        installed_root = root / "installed-skill"
+        touch(installed_root / "SKILL.md", "# Installed skill\n")
+        unrelated_project = root / "user-project"
+        unrelated_project.mkdir()
+        if verify.is_maintainer_checkout(installed_root):
+            raise AssertionError("standalone skill was misidentified as a maintainer checkout")
+        for installed_check in (
+            verify.check_expected_scripts(installed_root),
+            verify.check_routing_surfaces(installed_root),
+            verify.check_common_path_mistakes(installed_root, unrelated_project),
+        ):
+            if installed_check.status != verify.PASS:
+                raise AssertionError(
+                    "healthy installed skill outside the maintainer repository did not pass: "
+                    f"{installed_check}"
+                )
+        print("OK: installed skill in an arbitrary user project does not require maintainer files")
 
         summary_checks = [
             verify.CheckResult("a", verify.PASS, "ok"),
