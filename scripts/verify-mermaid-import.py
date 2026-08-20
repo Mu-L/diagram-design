@@ -41,6 +41,10 @@ def ok(message: str) -> None:
     print(f"OK: {message}")
 
 
+def normalize_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def invoke(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(EXTRACT), *args],
@@ -97,7 +101,10 @@ def check_legacy_stdout_encoding(tmp: Path) -> None:
         stderr=subprocess.PIPE,
         env=env,
     )
-    if file_process.returncode != 0 or destination.read_text(encoding="utf-8") != output:
+    if file_process.returncode != 0:
+        fail("Mermaid --out failed under a legacy Windows encoding")
+    file_output = destination.read_text(encoding="utf-8")
+    if normalize_newlines(file_output) != normalize_newlines(output):
         fail("Mermaid --out no longer matches its UTF-8 stdout digest")
 
     class CallerOwnedStdout(io.StringIO):

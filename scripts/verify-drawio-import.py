@@ -46,6 +46,10 @@ def ok(msg: str) -> None:
     print(f"OK: {msg}")
 
 
+def normalize_newlines(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def run_extract(args: list[str]) -> str:
     proc = subprocess.run(
         [sys.executable, str(EXTRACT), *args],
@@ -99,7 +103,10 @@ def check_legacy_stdout_encoding(tmp: Path) -> None:
         stderr=subprocess.PIPE,
         env=env,
     )
-    if file_process.returncode != 0 or destination.read_text(encoding="utf-8") != output:
+    if file_process.returncode != 0:
+        fail("draw.io --out failed under a legacy Windows encoding")
+    file_output = destination.read_text(encoding="utf-8")
+    if normalize_newlines(file_output) != normalize_newlines(output):
         fail("draw.io --out no longer matches its UTF-8 stdout digest")
 
     class CallerOwnedStdout(io.StringIO):
