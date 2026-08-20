@@ -60,6 +60,51 @@ def main() -> int:
         if errors:
             raise AssertionError(f"non-reference links should be ignored: {errors}")
 
+        scripts = skill / "scripts"
+        assets = skill / "assets"
+        scripts.mkdir()
+        assets.mkdir()
+        (scripts / "self_check.py").write_text("# packaged\n", encoding="utf-8")
+        (assets / "example.html").write_text("<!doctype html>\n", encoding="utf-8")
+        packaged_markdown = """Use [the reference](references/present.md#section),
+`scripts/self_check.py`, and `assets/example.html`.
+From a repository checkout, run `python3 <repo-root>/scripts/verify-geometry.py <file>`.
+"""
+        extracted = verify.scanner_visible_support_references(packaged_markdown)
+        expected = [
+            "assets/example.html",
+            "references/present.md",
+            "scripts/self_check.py",
+        ]
+        if extracted != expected:
+            raise AssertionError(f"strict-bundler references drifted: {extracted}")
+        errors = []
+        verify.check_packaged_support_references(errors, packaged_markdown, skill)
+        if errors:
+            raise AssertionError(f"valid packaged support references failed: {errors}")
+
+        for phantom in ("references/type-*.md", "references/type-<name>.md"):
+            errors = []
+            verify.check_packaged_support_references(
+                errors,
+                f"Load `{phantom}` before drawing.",
+                skill,
+            )
+            if len(errors) != 1 or "strict skill bundlers will abort installation" not in errors[0]:
+                raise AssertionError(
+                    f"scanner-visible placeholder was not rejected: {phantom!r}: {errors}"
+                )
+
+        errors = []
+        verify.check_packaged_support_references(
+            errors,
+            "See [unsafe](references/%2e%2e/secrets.md).",
+            skill,
+        )
+        expected = "SKILL.md exposes unsafe packaged support path 'references/../secrets.md'"
+        if errors != [expected]:
+            raise AssertionError(f"unsafe packaged reference was not rejected: {errors}")
+
         root = Path(temp_dir) / "repo"
         profile_reference = root / "skills/diagram-design/references/profiles.md"
         command = root / "commands/profile.md"
@@ -181,7 +226,8 @@ diagram-design/
             raise AssertionError(f"missing Factory native path was not reported: {errors}")
 
     print(
-        "PASS: docs sync checks references, profile surfaces, and Factory install contract"
+        "PASS: docs sync checks references, strict-bundler packaging, profile surfaces, "
+        "and Factory install contract"
     )
     return 0
 

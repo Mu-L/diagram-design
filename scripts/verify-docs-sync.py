@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify that routing and browsing surfaces stay in sync with the skill.
 
-Seven drift classes, each of which has shipped before:
+Eight drift classes, each of which has shipped before:
 
 1. The SKILL.md frontmatter description is the only text an agent sees before
    deciding to load the skill — every visual type in the selection table must
@@ -17,6 +17,8 @@ Seven drift classes, each of which has shipped before:
    drift, because they are four separate copies of one sentence.
 7. Factory Droid's README install commands and native manifest path must agree
    with the package metadata instead of becoming a second hand-maintained API.
+8. Every support path a strict skill bundler can extract from SKILL.md must be
+   a literal file shipped inside the skill package.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / "skills/diagram-design/SKILL.md"
@@ -44,6 +47,17 @@ PROFILE_SURFACES = (
 )
 FACTORY_MANIFEST = Path(".factory-plugin/plugin.json")
 FACTORY_MARKETPLACE = Path(".factory-plugin/marketplace.json")
+SUPPORT_DIRECTORIES = frozenset(
+    {"references", "templates", "scripts", "assets", "examples"}
+)
+# Mirrors Hermes Agent's support-file scanner. It intentionally sees Markdown
+# links, code spans, and path-like prose because strict bundlers may require
+# every extracted path before they install any part of the skill.
+SCANNER_VISIBLE_SUPPORT_REFERENCE = re.compile(
+    r"(?:\]\(|`|(?:^|[\s\"']))"
+    r"((?:references|templates|scripts|assets|examples)/[^\s)`\"'<>]+)",
+    re.MULTILINE,
+)
 
 
 def normalized(text: str) -> str:
@@ -143,6 +157,36 @@ def check_skill_reference_links(
     for target in sorted(set(skill_reference_links(markdown))):
         if not (skill_directory / target).is_file():
             errors.append(f"SKILL.md links to missing reference {target!r}")
+
+
+def scanner_visible_support_references(markdown: str) -> list[str]:
+    """Return the local support paths a strict skill bundler will request."""
+    normalized_markdown = markdown.replace("\\", "/")
+    references: set[str] = set()
+    for match in SCANNER_VISIBLE_SUPPORT_REFERENCE.finditer(normalized_markdown):
+        raw = match.group(1).rstrip(".,;:")
+        references.add(unquote(urlsplit(raw).path))
+    return sorted(references)
+
+
+def check_packaged_support_references(
+    errors: list[str], markdown: str, skill_directory: Path
+) -> None:
+    """Require every scanner-visible path to be a safe, packaged file."""
+    for target in scanner_visible_support_references(markdown):
+        parts = Path(target).parts
+        if (
+            not parts
+            or parts[0] not in SUPPORT_DIRECTORIES
+            or target.startswith("/")
+            or any(part in {"", ".", ".."} for part in parts)
+        ):
+            errors.append(f"SKILL.md exposes unsafe packaged support path {target!r}")
+        elif not (skill_directory / target).is_file():
+            errors.append(
+                f"SKILL.md exposes missing packaged support file {target!r}; "
+                "strict skill bundlers will abort installation"
+            )
 
 
 def check_profile_surfaces(errors: list[str], root: Path) -> None:
@@ -270,6 +314,11 @@ def main() -> int:
         SKILL.read_text(encoding="utf-8"),
         SKILL.parent,
     )
+    check_packaged_support_references(
+        errors,
+        SKILL.read_text(encoding="utf-8"),
+        SKILL.parent,
+    )
     check_profile_surfaces(errors, ROOT)
     if errors:
         print("FAIL docs sync")
@@ -278,7 +327,8 @@ def main() -> int:
         return 1
     print(
         "OK docs sync: description hooks, gallery reachability, README tree, "
-        "reference links, profile surfaces, manifest descriptions, Factory install contract"
+        "reference links, packaged support files, profile surfaces, manifest descriptions, "
+        "Factory install contract"
     )
     return 0
 
