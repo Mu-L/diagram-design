@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -56,6 +57,47 @@ def run_extract(args: list[str]) -> str:
             f"{process.stderr.strip()}"
         )
     return process.stdout
+
+
+def check_legacy_stdout_encoding(tmp: Path) -> None:
+    source = tmp / "unicode-stdout.mmd"
+    source.write_text(
+        'flowchart TD\nA["登录<br/>続行 ⇒"] --> B["résumé"]\n',
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    env["PYTHONUTF8"] = "0"
+    process = subprocess.run(
+        [sys.executable, str(EXTRACT), str(source)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    if process.returncode != 0:
+        fail(
+            "Mermaid extractor failed with legacy stdout encoding: "
+            + process.stderr.decode("utf-8", errors="replace").strip()
+        )
+    try:
+        output = process.stdout.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        fail(f"Mermaid extractor did not emit UTF-8 stdout: {error}")
+    for needle in ("登录", "続行 ⇒", "résumé", "⏎"):
+        if needle not in output:
+            fail(f"UTF-8 Mermaid digest lost {needle!r}: {output!r}")
+    if "�" in output:
+        fail("UTF-8 Mermaid digest contains a replacement character")
+    destination = tmp / "unicode-stdout.md"
+    file_process = subprocess.run(
+        [sys.executable, str(EXTRACT), str(source), "--out", str(destination)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    if file_process.returncode != 0 or destination.read_text(encoding="utf-8") != output:
+        fail("Mermaid --out no longer matches its UTF-8 stdout digest")
+    ok("Mermaid stdout stays lossless UTF-8 under a legacy Windows encoding")
 
 
 def expect_error(args: list[str], message: str) -> None:
@@ -708,6 +750,7 @@ def main() -> int:
         check_shape_and_edge_vocabulary(tmp)
         check_frontmatter(tmp)
         check_markdown_and_grammars(tmp)
+        check_legacy_stdout_encoding(tmp)
         check_sequence_grammar_forms(tmp)
         check_adversarial(tmp)
         check_errors_and_limits(tmp)

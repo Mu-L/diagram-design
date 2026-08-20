@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import importlib.util
 import json
+import os
 import re
 import struct
 import subprocess
@@ -54,6 +55,51 @@ def run_extract(args: list[str]) -> str:
     if proc.returncode != 0:
         fail(f"extractor exited {proc.returncode} for {args}: {proc.stderr.strip()}")
     return proc.stdout
+
+
+def check_legacy_stdout_encoding(tmp: Path) -> None:
+    source = tmp / "unicode-stdout.drawio"
+    source.write_text(
+        """<mxfile><diagram name="日本語">
+<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/>
+<mxCell id="2" value="登录&lt;br&gt;続行 ⇒ résumé" vertex="1" parent="1">
+<mxGeometry x="0" y="0" width="120" height="60" as="geometry"/>
+</mxCell></root></mxGraphModel></diagram></mxfile>""",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    env["PYTHONUTF8"] = "0"
+    process = subprocess.run(
+        [sys.executable, str(EXTRACT), str(source)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    if process.returncode != 0:
+        fail(
+            "draw.io extractor failed with legacy stdout encoding: "
+            + process.stderr.decode("utf-8", errors="replace").strip()
+        )
+    try:
+        output = process.stdout.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        fail(f"draw.io extractor did not emit UTF-8 stdout: {error}")
+    for needle in ("日本語", "登录", "続行 ⇒ résumé", "⏎"):
+        if needle not in output:
+            fail(f"UTF-8 draw.io digest lost {needle!r}: {output!r}")
+    if "�" in output:
+        fail("UTF-8 draw.io digest contains a replacement character")
+    destination = tmp / "unicode-stdout.md"
+    file_process = subprocess.run(
+        [sys.executable, str(EXTRACT), str(source), "--out", str(destination)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    if file_process.returncode != 0 or destination.read_text(encoding="utf-8") != output:
+        fail("draw.io --out no longer matches its UTF-8 stdout digest")
+    ok("draw.io stdout stays lossless UTF-8 under a legacy Windows encoding")
 
 
 def load_extractor_module():
@@ -443,6 +489,7 @@ def main() -> int:
         check_files()
         check_parse_raw()
         check_containers(tmp)
+        check_legacy_stdout_encoding(tmp)
         check_digest_escaping(tmp)
         check_security_and_limits(tmp)
         check_docs()
