@@ -10,7 +10,7 @@ Ten drift classes, each of which has shipped before:
    gallery tab must point at a file that exists.
 3. Every concrete file named in README.md's architecture tree must exist.
 4. Every relative references/*.md link in SKILL.md must resolve.
-5. Claude and Pi profile surfaces must both route to the profile reference.
+5. Claude and Pi command/prompt surfaces must route to the matching reference.
 6. The plugin manifests repeat the SKILL.md description verbatim. They are the
    text a user reads *before installing*, so by ADR 0004's own argument they
    need every type's lexical hook too - and nothing else notices when they
@@ -46,10 +46,17 @@ DESCRIPTION_ALIASES = {
     "line chart": "line",
     "scatter plot": "scatter",
 }
-PROFILE_SURFACES = (
-    Path("commands/profile.md"),
-    Path("prompts/profile.md"),
-)
+ROUTING_SURFACES = {
+    Path("commands/export-diagram.md"): "references/export.md",
+    Path("commands/import-drawio.md"): "references/import-drawio.md",
+    Path("commands/import-mermaid.md"): "references/import-mermaid.md",
+    Path("commands/profile.md"): "references/profiles.md",
+    Path("commands/doctor.md"): "references/doctor.md",
+    Path("prompts/export-diagram.md"): "references/export.md",
+    Path("prompts/import-mermaid.md"): "references/import-mermaid.md",
+    Path("prompts/profile.md"): "references/profiles.md",
+    Path("prompts/doctor.md"): "references/doctor.md",
+}
 FACTORY_MANIFEST = Path(".factory-plugin/plugin.json")
 FACTORY_MARKETPLACE = Path(".factory-plugin/marketplace.json")
 SUPPORT_DIRECTORIES = frozenset(
@@ -215,18 +222,18 @@ def check_packaged_support_references(
         )
 
 
-def check_profile_surfaces(errors: list[str], root: Path) -> None:
-    reference = root / "skills/diagram-design/references/profiles.md"
-    if not reference.is_file():
-        errors.append("profile source of truth is missing: skills/diagram-design/references/profiles.md")
-    for relative in PROFILE_SURFACES:
+def check_routing_surfaces(errors: list[str], root: Path) -> None:
+    for relative, reference_link in ROUTING_SURFACES.items():
+        reference = root / "skills/diagram-design" / reference_link
+        if not reference.is_file():
+            errors.append(f"routing source of truth is missing: skills/diagram-design/{reference_link}")
         path = root / relative
         if not path.is_file():
-            errors.append(f"profile surface is missing: {relative.as_posix()}")
+            errors.append(f"routing surface is missing: {relative.as_posix()}")
             continue
-        if "references/profiles.md" not in path.read_text(encoding="utf-8"):
+        if reference_link not in path.read_text(encoding="utf-8"):
             errors.append(
-                f"profile surface does not route to references/profiles.md: {relative.as_posix()}"
+                f"routing surface does not route to {reference_link}: {relative.as_posix()}"
             )
 
 
@@ -441,9 +448,9 @@ def main() -> int:
         SKILL.read_text(encoding="utf-8"),
         SKILL.parent,
     )
-    check_profile_surfaces(errors, ROOT)
     check_type_counts(errors, ROOT)
     check_high_level_reference(errors, HIGH_LEVEL_REFERENCE.read_text(encoding="utf-8"))
+    check_routing_surfaces(errors, ROOT)
     if errors:
         print("FAIL docs sync")
         for error in errors:
@@ -451,7 +458,7 @@ def main() -> int:
         return 1
     print(
         "OK docs sync: description hooks, gallery reachability, README tree, "
-        "reference links, packaged support files, profile surfaces, manifest descriptions, "
+        "reference links, packaged support files, routing surfaces, manifest descriptions, "
         "Factory install contract, type-count routing, High-Level invariants"
     )
     return 0
